@@ -433,7 +433,7 @@ class MachiningProcess:
 	def calculate_k_chip(self):
 		return (self.material.sigma_l / sqrt(3))
 
-	def find_min_index(self,list1,list2):
+	def find_min_index(self,list1,list2,end = "last"):
 		"""
 		function to find the index at which the difference between list1 and list2 is minimum (zero)
 		tries to find the right-most point since it is required in tau_int and k_chip for finding phi
@@ -443,9 +443,15 @@ class MachiningProcess:
 
 		diff_list = [x-y for x,y in zip(list1,list2)]
 
-		for i in range(1,len(diff_list)):
-			if (diff_list[i]>0) != (diff_list[i-1]>0):
-				index = i
+		if end == "last":
+			for i in range(1,len(diff_list)):
+				if (diff_list[i]>0) != (diff_list[i-1]>0):
+					index = i
+		elif end == "first":
+			for i in range(1,len(diff_list)):
+				if (diff_list[i]>0) != (diff_list[i-1]>0):
+					index = i
+					break
 
 		if index:
 			return index
@@ -459,127 +465,264 @@ class MachiningProcess:
 	def calculate_sigma_N(self):
 		return (self.N / (self.MM_TO_M(self.h) * self.MM_TO_M(self.w)))
 
-	def start_machining(self):
-		# Delta = arange(0.01,1,0.01)
-		Phi = arange(5.0,45.1,0.1)
-		C_list = arange(1.0,7,0.2)
-		F_C_list = []
-		# min_delta = 0
-		# last_min_delta = 999999
+	def calculate_all_properties(self,delta = 0.05,C = 5.9,phi = 0.01):
+		"""
+		The default values of C and delta are based on Stevenson and Duncan's (1983) work
+		phi is i randians
+		"""
 		MAX_ITER = 1000
 		num = 0
 
-		i = 0
-		j = 0
-		# while abs(min_delta - last_min_delta)>1e-2:
-			# for j,delta in enumerate(Delta):
-		self.delta = 0.01
+		self.delta = delta
+		self.C = C
+		self.phi = phi
 
-		Sigma_N = []
-		Sigma_N_dash = []
-		for k,C in enumerate(C_list):
-			self.C = C
-			Tau_int = []
-			K_chip = []
-			for m,phi in enumerate(Phi):
-				self.phi = radians(phi)
+		self.l = self.calculate_l()
+		self.Vs = self.calculate_Vs()
+		self.gamma_dot_AB = self.calculate_gamma_dot_AB()
+		self.gamma_AB = self.calculate_gamma_AB()
+		self.epsilon_dot_AB = self.calculate_epsilon_dot_AB()
+		self.epsilon_AB = self.calculate_epsilon_AB()
 
-				self.l = self.calculate_l()
-				self.Vs = self.calculate_Vs()
-				self.gamma_dot_AB = self.calculate_gamma_dot_AB()
-				self.gamma_AB = self.calculate_gamma_AB()
-				self.epsilon_dot_AB = self.calculate_epsilon_dot_AB()
-				self.epsilon_AB = self.calculate_epsilon_AB()
+		self.T_AB = self.T_W
+		last_T_AB = 0
 
-				self.T_AB = self.T_W
-				last_T_AB = 0
+		for num in range(0,MAX_ITER):				
+			if abs(self.T_AB - last_T_AB)<0.1:
+				break							
+			last_T_AB = self.T_AB
+			self.material.S = self.material.calculate_S(self.T_AB)
+			self.material.K = self.material.calculate_K(self.T_AB)
+			self.T_mod = self.calculate_T_mod(self.T_AB,self.epsilon_dot_AB)
+			self.material.sigma_l = self.material.calculate_sigma_l(self.T_mod)
+			self.material.n = self.material.calculate_n(self.T_mod)				
+			self.k_AB = self.calculate_k_AB()
+			self.F_S = self.calculate_F_S()							
+			self.R_T = self.calculate_R_T()
+			self.beta = self.calculate_beta()							
+			self.delta_T_SZ = self.calculate_delta_T_SZ()
+			self.T_AB = self.calculate_T_AB()													
 
-				for num in range(0,MAX_ITER):				
-					if abs(self.T_AB - last_T_AB)<0.1:
-						break							
-					last_T_AB = self.T_AB
-					self.material.S = self.material.calculate_S(self.T_AB)
-					self.material.K = self.material.calculate_K(self.T_AB)
-					self.T_mod = self.calculate_T_mod(self.T_AB,self.epsilon_dot_AB)
-					self.material.sigma_l = self.material.calculate_sigma_l(self.T_mod)
-					self.material.n = self.material.calculate_n(self.T_mod)				
-					self.k_AB = self.calculate_k_AB()
-					self.F_S = self.calculate_F_S()							
-					self.R_T = self.calculate_R_T()
-					self.beta = self.calculate_beta()							
-					self.delta_T_SZ = self.calculate_delta_T_SZ()
-					self.T_AB = self.calculate_T_AB()													
+		if num + 1 == MAX_ITER:
+			print "MAX_ITER exceeded in T_AB loop" 
 
-				if num + 1 == MAX_ITER:
-					print "MAX_ITER exceeded in T_AB loop" 
+		self.theta = self.calculate_theta()
+		self.lam = self.calculate_lam()
+		self.R = self.calculate_R()
+		self.F = self.calculate_F()
+		self.N = self.calculate_N()
+		self.F_C = self.calculate_F_C()
 
-				self.theta = self.calculate_theta()
-				self.lam = self.calculate_lam()
-				self.R = self.calculate_R()
-				self.F = self.calculate_F()
-				self.N = self.calculate_N()
-				self.F_C = self.calculate_F_C()
+		self.t2 = self.calculate_t2()
+		self.V = self.calculate_V()
+		self.h = self.calculate_h()
+		self.tau_int = self.calculate_tau_int()			
+		self.gamma_dot_int = self.calculate_gamma_dot_int()
+		self.epsilon_dot_int = self.calculate_epsilon_dot_int()
 
-				self.t2 = self.calculate_t2()
-				self.V = self.calculate_V()
-				self.h = self.calculate_h()
-				self.tau_int = self.calculate_tau_int()			
-				self.gamma_dot_int = self.calculate_gamma_dot_int()
-				self.epsilon_dot_int = self.calculate_epsilon_dot_int()
+		self.T_C = self.T_W + self.delta_T_SZ
+		last_T_C = 0
 
-				self.T_C = self.T_W + self.delta_T_SZ
-				last_T_C = 0
+		for num in range(0,MAX_ITER):								
+			if abs(self.T_C - last_T_C)<0.1:					
+				break
+			last_T_C = self.T_C
+			self.material.S = self.material.calculate_S(self.T_C)
+			self.material.K = self.material.calculate_K(self.T_C)				
+			self.delta_T_C = self.calculate_delta_T_C()				
+			self.T_C = self.calculate_T_C()
 
-				for num in range(0,MAX_ITER):								
-					if abs(self.T_C - last_T_C)<0.1:					
-						break
-					last_T_C = self.T_C
-					self.material.S = self.material.calculate_S(self.T_C)
-					self.material.K = self.material.calculate_K(self.T_C)				
-					self.delta_T_C = self.calculate_delta_T_C()				
-					self.T_C = self.calculate_T_C()
+		if num + 1 == MAX_ITER:
+			print "MAX_ITER exceeded in T_C loop"
 
-				if num + 1 == MAX_ITER:
-					print "MAX_ITER exceeded in T_C loop"
+		self.material.S = self.material.calculate_S(self.T_C)
+		self.material.K = self.material.calculate_K(self.T_C)
+		self.R_T = self.calculate_R_T()						
+		self.delta_T_M = self.calculate_delta_T_M()
+		self.T_int = self.calculate_T_int()
+		self.T_mod = self.calculate_T_mod(self.T_int,self.epsilon_dot_int)
+		self.material.sigma_l = self.material.calculate_sigma_l(self.T_mod)
+		self.k_chip = self.calculate_k_chip() 
 
-				self.material.S = self.material.calculate_S(self.T_C)
-				self.material.K = self.material.calculate_K(self.T_C)
-				self.R_T = self.calculate_R_T()
-				# self.print_status(m= m)
-				self.delta_T_M = self.calculate_delta_T_M()
-				self.T_int = self.calculate_T_int()
-				self.T_mod = self.calculate_T_mod(self.T_int,self.epsilon_dot_int)
-				self.material.sigma_l = self.material.calculate_sigma_l(self.T_mod)
-				self.k_chip = self.calculate_k_chip() 
+		self.sigma_N_dash = self.calculate_sigma_N_dash()
+		self.sigma_N = self.calculate_sigma_N()
 
-				Tau_int.append(self.tau_int)
-				K_chip.append(self.k_chip)
-				# self.print_status(m = m)
-
-			self.phi = radians(Phi[self.find_min_index(Tau_int,K_chip)])
-
-			plot_graph(x = Phi
-				      ,y1 = [y/(1e+6) for y in Tau_int]
-					  ,y2 = [y/(1e+6) for y in K_chip]
-					  ,save = True
-					  ,title = "Resolved Shear Stress at Tool-Chip Interface, Shear Flow Stress in the Chip VS. Shear Angle"
-					  + " i = " + str(i) + " j = " + str(j) + " k = " + str(k) + " m = " + str(m)
-					  ,xlabel = "Shear Angle, $\phi$ (degrees)"
-					  ,ylabel = "Stress (MPa)")
-
-			self.sigma_N_dash = self.calculate_sigma_N_dash()
-			self.sigma_N = self.calculate_sigma_N()
-			Sigma_N.append(self.sigma_N)
-			Sigma_N_dash.append(self.sigma_N_dash)
-
-		self.C = C_list[self.find_min_index(Sigma_N,Sigma_N_dash)]
-		F_C_list.append(self.F_C)
+	def start_machining(self):
+		"""
+		The while loop runs two times:
+		i = 0: For finding the delta_min at which F_C is minimum
+		i = 1: For finding the value of all properties at delta_min
+		"""
 		
-		# last_min_delta = min_delta
-		# min_F_C = min(F_C_list)
-		# min_delta = Delta[F_C_list.index(min_F_C)]
-		# i += 1
-		# self.print_status(i,j,k,m)
+		#predefined lists for iterations
+		Delta = arange(0.01,0.3,0.01)
+		Phi = arange(5.0,45.1,0.1)
+		C_list = arange(1.0,7,0.2)
+		
+		#lists for storing data for plotting and use after iterations
+		T_mod_list = []
+		k_chip_list = []
+		F_C_list = []		
+		
+		min_delta = 0
+		MAX_ITER = 1000
+		num = 0
+		min_delta_flag = True
+		i = 0
+
+		while min_delta_flag == True:		
+			for j,delta in enumerate(Delta):
+				self.delta = delta
+				#lists for storing data for plotting and use after iterations
+				Sigma_N = []
+				Sigma_N_dash = []
+				Phi_eq_list = []
+				Phi_eq_list = [] #list of phi at which tau_int = k_chip for differenct C
+				for k,C in enumerate(C_list):
+					self.C = C
+					Tau_int = []
+					K_chip = []
+					for m,phi in enumerate(Phi):
+						self.phi = radians(phi)
+
+						self.l = self.calculate_l()
+						self.Vs = self.calculate_Vs()
+						self.gamma_dot_AB = self.calculate_gamma_dot_AB()
+						self.gamma_AB = self.calculate_gamma_AB()
+						self.epsilon_dot_AB = self.calculate_epsilon_dot_AB()
+						self.epsilon_AB = self.calculate_epsilon_AB()
+
+						self.T_AB = self.T_W
+						last_T_AB = 0
+
+						for num in range(0,MAX_ITER):				
+							if abs(self.T_AB - last_T_AB)<0.1:
+								break							
+							last_T_AB = self.T_AB
+							self.material.S = self.material.calculate_S(self.T_AB)
+							self.material.K = self.material.calculate_K(self.T_AB)
+							self.T_mod = self.calculate_T_mod(self.T_AB,self.epsilon_dot_AB)
+							self.material.sigma_l = self.material.calculate_sigma_l(self.T_mod)
+							self.material.n = self.material.calculate_n(self.T_mod)				
+							self.k_AB = self.calculate_k_AB()
+							self.F_S = self.calculate_F_S()							
+							self.R_T = self.calculate_R_T()
+							self.beta = self.calculate_beta()							
+							self.delta_T_SZ = self.calculate_delta_T_SZ()
+							self.T_AB = self.calculate_T_AB()													
+
+						if num + 1 == MAX_ITER:
+							print "MAX_ITER exceeded in T_AB loop" 
+
+						self.theta = self.calculate_theta()
+						self.lam = self.calculate_lam()
+						self.R = self.calculate_R()
+						self.F = self.calculate_F()
+						self.N = self.calculate_N()
+						self.F_C = self.calculate_F_C()
+
+						self.t2 = self.calculate_t2()
+						self.V = self.calculate_V()
+						self.h = self.calculate_h()
+						self.tau_int = self.calculate_tau_int()			
+						self.gamma_dot_int = self.calculate_gamma_dot_int()
+						self.epsilon_dot_int = self.calculate_epsilon_dot_int()
+
+						self.T_C = self.T_W + self.delta_T_SZ
+						last_T_C = 0
+
+						for num in range(0,MAX_ITER):								
+							if abs(self.T_C - last_T_C)<0.1:					
+								break
+							last_T_C = self.T_C
+							self.material.S = self.material.calculate_S(self.T_C)
+							self.material.K = self.material.calculate_K(self.T_C)				
+							self.delta_T_C = self.calculate_delta_T_C()				
+							self.T_C = self.calculate_T_C()
+
+						if num + 1 == MAX_ITER:
+							print "MAX_ITER exceeded in T_C loop"
+
+						self.material.S = self.material.calculate_S(self.T_C)
+						self.material.K = self.material.calculate_K(self.T_C)
+						self.R_T = self.calculate_R_T()						
+						self.delta_T_M = self.calculate_delta_T_M()
+						self.T_int = self.calculate_T_int()
+						self.T_mod = self.calculate_T_mod(self.T_int,self.epsilon_dot_int)
+						self.material.sigma_l = self.material.calculate_sigma_l(self.T_mod)
+						self.k_chip = self.calculate_k_chip() 
+
+						Tau_int.append(self.tau_int)
+						K_chip.append(self.k_chip)
+
+					self.phi = radians(Phi[self.find_min_index(Tau_int,K_chip,end = "last")])
+					Phi_eq_list.append(self.phi)					
+
+					# calculating all the properties for the value of phi at which tau_int = k_chip for the	generated C				
+					self.calculate_all_properties(delta = self.delta,C = self.C,phi = self.phi)
+					
+					self.sigma_N_dash = self.calculate_sigma_N_dash()
+					self.sigma_N = self.calculate_sigma_N()
+					Sigma_N.append(self.sigma_N)
+					Sigma_N_dash.append(self.sigma_N_dash)
+
+					# plot_graph(x = Phi
+					# 	      ,y1 = [y/(1e+6) for y in Tau_int]
+					# 		  ,y2 = [y/(1e+6) for y in K_chip]
+					# 		  ,save = True
+					# 		  ,title = "Resolved Shear Stress at Tool-Chip Interface, Shear Flow Stress in the Chip VS. Shear Angle"
+					# 		  + " j = " + str(j) + " k = " + str(k) + " m = " + str(m)
+					# 		  ,xlabel = "Shear Angle, $\phi$ (degrees)"
+					# 		  ,ylabel = "Stress (MPa)")
+
+				index = self.find_min_index(Sigma_N,Sigma_N_dash,end = "first")
+				self.C = C_list[index]
+				self.phi = Phi_eq_list[index]
+				
+				# calculating all the properties for the value of phi at which tau_int = k_chip and C at which sigma_N = sigma_N_dash					
+				self.calculate_all_properties(delta = self.delta,C = self.C,phi = self.phi)
+
+				F_C_list.append(self.F_C)
+				T_mod_list.append(self.T_mod)#storing the T_mod values at tool-chip interface
+
+				plot_graph(x = C_list
+					      ,y1 = [y/(1e+6) for y in Sigma_N_dash]
+						  ,y2 = [y/(1e+6) for y in Sigma_N]
+						  ,save = True
+						  ,title = "$\sigma_N^{'}$ , $\sigma_N$ VS C"
+						  + "; j = " + str(j) + "; k = " + str(k) + "; m = " + str(m) +" )"
+						  ,xlabel = "C"
+						  ,ylabel = "Stress (MPa)")
+
+			if i==0:
+				plot_graph(x = Delta
+					      ,y1 = F_C_list
+						  ,save = True
+						  ,title = "$F_C$ VS $\delta$"
+						  ,xlabel = "Delta, $\delta$"
+						  ,ylabel = "Cutting Force, $F_C$ (N)")
+				plot_graph(x = Delta
+					      ,y1 = T_mod_list
+						  ,save = True
+						  ,title = "$T_{mod}$ VS $\delta$"
+						  ,xlabel = "Delta, $\delta$"
+						  ,ylabel = "Velocity-Modified Temperature, $T_{mod}$ (K)")
+				# plot_graph(x = Delta
+				# 	      ,y1 = T_mod_list
+				# 		  ,save = True
+				# 		  ,title = "$T_{mod}$ VS $\delta$"
+				# 		  ,xlabel = "Delta, $\delta$"
+				# 		  ,ylabel = "Velocity-Modified Temperature, $T_{mod}$ (K)")
+
+			min_F_C = min(F_C_list)
+			min_delta = Delta[F_C_list.index(min_F_C)]
+			Delta = [min_delta]
+			i += 1
+			if i==2:
+				min_delta_flag = False
+
+		self.print_status()
+
 		
 if __name__ == '__main__':
 	#defining the material properties of the material used for machining
